@@ -29,36 +29,32 @@ void init_fds(int sock_listen) {
 	fds[0].fd = sock_listen;
 	// There is data to read.
 	fds[0].events = POLLIN;
-	// 10 seconds
-	timeout = (3 * 60 * 1000);
+	// infinity!!!!!!!!
+	timeout = -1;
+	//timeout = (3 * 60 * 1000);
 }
 
-int add_fds(int sock_listen) {
+int add_fds(int sock_listen, struct sockaddr_in *client) {
 	int       sock;
-	struct    sockaddr_in client;
 	socklen_t client_len = sizeof(client);
-	char      client_name[128];
 
-	sock = accept(sock_listen, (struct sockaddr *)&client, &client_len);
+	sock = accept(sock_listen, (struct sockaddr *)client, &client_len);
 
 	if (sock < 0) {
 		if (errno != EWOULDBLOCK) {
 			perror("\033[31m! accept() failed\033[39m");
-			return 1;
+			return -1;
 		}
-		return 0;
+		return -1;
 	}
 
-	sprintf(client_name, "%s:%d", 
-		inet_ntoa(client.sin_addr), ntohs(client.sin_port));
-
-	printf("\033[32m[accepted connection from %s]\033[39m\n", client_name);
+	printf("\033[32m[accepted connection from %s:%d]\033[39m\n", inet_ntoa(client->sin_addr), ntohs(client->sin_port));
 
 	fds[nfds].fd = sock;
 	fds[nfds].events = POLLIN;
 	nfds++;
 
-    return 0;
+    return sock;
 }
 
 // close all fds.

@@ -3,6 +3,7 @@ C++=g++
 LD=g++
 CFLAGS=-c -Wall -pedantic-errors -O0 -g3 -std=c11  -I../
 LDLIB=-lsqlite3 -lssl -lcrypto
+LDFLAGS=
 OBJECTS=013server.o ../exp1lib.o db.o message_queue.o fds.o
 EXECUTABLE=013server
 

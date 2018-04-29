@@ -1,10 +1,41 @@
 #include "exp1.h"
 #include "exp1lib.h"
 #include <pthread.h>
+#include <openssl/md5.h>
+
+char* compute_md5(char *data, char *mdString) {
+    MD5_CTX c;
+    unsigned char md[MD5_DIGEST_LENGTH];
+    int r, i;
+    
+    r = MD5_Init(&c);
+    if(r != 1) {
+        perror("init");
+        exit(1);
+    }
+    
+    r = MD5_Update(&c, data, strlen(data));
+    if(r != 1) {
+        perror("update");
+        exit(1);
+    }
+    
+    r = MD5_Final(md, &c);
+    if(r != 1) {
+        perror("final");
+        exit(1);
+    }
+ 
+    for(i = 0; i < 16; i++)
+         sprintf(&mdString[i * 2], "%02x", (unsigned int)md[i]);
+
+    return mdString;
+}
 
 void login(int sock) {
 	int     ret = 0;
 	char    buf[64];
+    char    md5_pass[33];
     
     while(1){
         printf("username: ");
@@ -17,11 +48,15 @@ void login(int sock) {
 
         printf("password: ");
         memset(buf, 0, sizeof(buf));
+        memset(md5_pass, 0, sizeof(md5_pass));
         fgets(buf, 1024, stdin);
         if(strlen(buf) == 0) {
             break;
         }
-        send(sock, buf, sizeof(buf), 0);
+        buf[strlen(buf)-1] = '\0';
+        // hash化
+        compute_md5(buf, md5_pass);
+        send(sock, md5_pass, sizeof(md5_pass), 0);
 
         memset(buf, 0, sizeof(buf));
         ret = recv(sock, buf, sizeof(buf), 0);
@@ -32,7 +67,7 @@ void login(int sock) {
         
         printf("%s", buf);
 
-        if(strcmp(buf, "Logged in!\n") == 0)
+        if((strstr(buf, "Logged in!") - buf) > 0)
             return;
     }
 }

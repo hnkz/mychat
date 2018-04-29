@@ -75,7 +75,7 @@ int get_line_where(sqlite3 *conn, char *table, char *values, char *err_msg, int 
     ret = sqlite3_exec(
             conn        , // DBコネクション
             &sql_str[0] , // SQL文
-            get_row  , // コールバック関数
+            set_row_num  , // コールバック関数
             NULL        , // CB関数に渡す引数
             &err_msg      // エラーメッセージ
         );
@@ -99,6 +99,34 @@ int insert(sqlite3 *conn, char *table, char *values, char *err_msg) {
             &err_msg      // エラーメッセージ
         );
     return ret;
+}
+
+void insert_log(char *log_val, char *table) {
+    int ret = 0;
+    char *err_msg = NULL;
+    sqlite3 *conn = NULL;
+
+    conn = connect_db("./db_test.sqlite3");
+
+    if( SQLITE_OK != ret ){
+        sqlite3_close( conn );
+        printf("err: %s\n", err_msg);
+        sqlite3_free( err_msg );
+        exit(-1);
+    }
+
+    ret = insert(conn, table, log_val, err_msg);
+    if( SQLITE_OK != ret ){
+        sqlite3_close( conn );
+        printf("err: %s\n", err_msg);
+        sqlite3_free( err_msg );
+        exit(-1);
+    }
+    
+    ret = sqlite3_close( conn );
+    if( SQLITE_OK != ret ){
+        exit(-1);
+    } 
 }
 
 void test_db() {
@@ -131,7 +159,7 @@ void test_db() {
     }  
 }
 
-int login_db_process(char *username, char *pass_md5) {
+int get_row_num(char *username, char *pass_md5) {
 	int ret = 0;
 	int row_num;
 	char *err_msg = NULL;
@@ -158,7 +186,7 @@ int login_db_process(char *username, char *pass_md5) {
 	return row_num;
 }
 
-int get_row(
+int set_row_num(
       void *get_prm   , // sqlite3_exec()の第4引数
       int col_cnt     , // 列数
       char **row_txt  , // 行内容

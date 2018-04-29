@@ -7,6 +7,7 @@
 
 typedef struct _user {
 	char  client_name[128];
+	char  ip_port[128];
 	int   login_flag;
 } User;
 
@@ -50,12 +51,16 @@ void init_clients(int sock_listen) {
 
 // shut client
 void shut_client(int fd_num) {
+	char log_val[256];
 	struct pollfd fd = get_fd(fd_num);
 	printf("\033[31m! Close clients(fd = %d)\033[39m\n", fd.fd);
-	memset(user[fd.fd].client_name, 0, sizeof(user[fd.fd].client_name));
-	user[fd.fd].login_flag = 0;
-	close(fd.fd);
+
+	// log
+	snprintf(log_val, sizeof(log_val), "'%s', '%s', current_timestamp", user[fd.fd].client_name, user[fd.fd].ip_port);
+	insert_log(log_val, "logout_log");
+	memset(&user[fd.fd], 0, sizeof(user[fd.fd]));
 	close_fd(fd_num);
+	close(fd.fd);
 	compress_array_flag = 1;
 }
 
@@ -105,7 +110,6 @@ void process_command(int fd_num, char command[]) {
 			
 			strncpy(username, start_p+1, len);
 			snprintf(msg, sizeof(msg), "(%s): %s", user[fd.fd].client_name, end_p+2);
-			//strcat(msg, end_p+2, 1024);
 
 			send_to(username, msg);
 
@@ -132,10 +136,10 @@ void do_server(int sock_listen) {
 		ret = start_poll();
 		
 		if (ret < 0) {
-			perror("  poll() failed");
+			perror("\033[31mpoll() failed\033[39m");
 			break;
 		} else if (ret == 0) {
-			printf("  poll() timed out.  End program.\n");
+			perror("\033[31mpoll() timed out.  End program.\033[39m\n");
 			break;
 		}
 
@@ -156,20 +160,34 @@ void do_server(int sock_listen) {
 			}
 			// accept client
 			if (fd.fd == sock_listen) {
-				end_server = add_fds(sock_listen);
+				int client_fd;
+				char log_val[256];
+				struct sockaddr_in client;
+				client_fd = add_fds(sock_listen, &client);
+
+				// ip port 登録
+				snprintf(user[client_fd].ip_port, sizeof(user[client_fd].ip_port), "%s:%d", inet_ntoa(client.sin_addr), ntohs(client.sin_port));
+				snprintf(log_val, sizeof(log_val), "'%s', current_timestamp", user[client_fd].ip_port);
+				insert_log(log_val, "access_log");
 			// clients process
 			} else {
 				// if client login, message process
 				if(user[fd.fd].login_flag) {
+					char log_val[1280];
 					memset(msg, 0, sizeof(msg));
 					// If return value == -1, error process
 					if(recv_clients(i, msg) == -1) {
-						printf("error...");
 						break;
 					}
 
-					printf("(%s): %s", user[fd.fd].client_name, msg);
+					msg[strlen(msg)-1] = '\0';
+					printf("(%s): %s\n", user[fd.fd].client_name, msg);
 
+					// insert log
+					snprintf(log_val, sizeof(log_val), "'%s', '%s', '%s', current_timestamp", user[fd.fd].client_name, msg, user[fd.fd].ip_port);
+					insert_log(log_val, "msg_log");
+
+					// process msg
 					if(msg[0] == '\\') {
 						process_command(i, msg);
 					} else {
@@ -187,7 +205,6 @@ void do_server(int sock_listen) {
 			compress_array_flag = 0;
 			compress_array();
 		}
-
 	} while(!end_server);
 	close_all_fds();
 }
@@ -233,6 +250,7 @@ int recv_clients(int fd_num, char msg[]) {
 void send_to(char to[], char msg[]) {
 	int i;
 	int ret;
+	char msg_color[1024] = "\033[34m";
 
 	for(i = 0; i < MAX_CLIENTS; i++) {
 		if(strcmp(user[i].client_name, to) == 0) {
@@ -246,8 +264,10 @@ void send_to(char to[], char msg[]) {
 		return;
 	}
 
-	printf("%s", msg);
-	ret = send(i, msg, strlen(msg), 0);
+	strcat(msg_color, msg);
+	strcat(msg_color, "\033[39m\n");
+
+	ret = send(i, msg_color, strlen(msg_color), 0);
 	if(ret < 0) {
 		perror("\033[31m! send() failed\033[39m");
 	}
@@ -258,10 +278,10 @@ void broadcast_clients(int fd_num, char buf[]) {
 	int i;
 	char msg[1024];
 	size_t len;
-	size_t ret;
+	int ret;
 	struct pollfd fd;
 
-	snprintf(msg, sizeof(msg), "(%s): %s", user[get_fd(fd_num).fd].client_name, buf);
+	snprintf(msg, sizeof(msg), "(%s): %s\n", user[get_fd(fd_num).fd].client_name, buf);
 	len = strlen(msg);
 
 	//printf("msg: %s %zu %s\n", buf, len, user[fds[fd_num].fd].client_name);
@@ -282,6 +302,7 @@ void broadcast_clients(int fd_num, char buf[]) {
 	}
 }
 
+// recv error process
 int is_recv_error(int len, int fd_num) {
 	if (len < 0) {
 		perror("\033[31m! recv() failed\033[39m");
@@ -298,17 +319,16 @@ int is_recv_error(int len, int fd_num) {
 
 // login process
 void login(int fd_num) {
-	const char  login_msg[] = "Logged in!\n";
-	const char  error_msg[] = "Could not login!\n";
+	const char  login_msg[] = "\033[32mLogged in!\033[39m\n";
+	const char  error_msg[] = "\033[31mCould not login!\033[39m\n";
 	char  username[64];
-	char  password[64];
-	char  pass_md5[33];
+	char  password[34];
+	char log_val[256];
 	int   ret = 0;
 	struct pollfd fd = get_fd(fd_num);
 
 	memset(username, 0, sizeof(username));
 	memset(password, 0, sizeof(password));
-	memset(pass_md5, 0, sizeof(pass_md5));
 
 	// recv username
 	ret = recv(fd.fd, username, sizeof(username), 0);
@@ -326,22 +346,24 @@ void login(int fd_num) {
 		return;
 	}
 
-	password[strlen(password)-1] = '\0';
-	compute_md5(password, pass_md5);
+	printf("\033[35m[%s try to login]\033[39m\n", username);
 
-	printf("user: %s, pass: %s, pass_md5: %s\n", username, password, pass_md5);
+	snprintf(log_val, sizeof(log_val), "'%s', '%s', current_timestamp", username, user[fd.fd].ip_port);
+	insert_log(log_val, "try_to_login_log");
 
 	// userテーブルに行が一行であれば、ログイン成功
-	ret = login_db_process(username, pass_md5);
+	ret = get_row_num(username, password);
 	if(ret == 1) {
 		printf("\033[32m[%s logged in!]\033[39m\n", username);
 
+		// ユーザ　初期化
 		send(fd.fd, login_msg, sizeof(login_msg), 0);
 		user[fd.fd].login_flag = 1;
 		strncpy(user[fd.fd].client_name, username, strlen(username));
 		user[fd.fd].client_name[strlen(username)+1] = '\0';
-		send_queue(fd_num, username);
 
+		// キュー内のDMを送る
+		send_queue(fd_num, username);
 	} else {
 
 		send(fd.fd, error_msg, sizeof(error_msg), 0);
@@ -356,8 +378,8 @@ void send_queue(int fd_num, char to[]) {
 	while(1){
 		memset(msg, 0, sizeof(msg));
 		if(search_msg_queue(to, msg)) {
-			printf("%s", msg);
-			send(get_fd(fd_num).fd, msg, sizeof(msg), 0);
+			printf("\033[34m%s\033[39m\n", msg);
+			send_to(user[get_fd(fd_num).fd].client_name, msg);
 		} else {
 			break;
 		}

@@ -1,4 +1,4 @@
-#define MAX_QUEUE 10
+#define MAX_QUEUE 100
 
 typedef struct _message_queue {
   char to[32];
