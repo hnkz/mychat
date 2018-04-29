@@ -68,10 +68,10 @@ void shut_client(int fd_num) {
 void process_command(int fd_num, char command[]) {
 	static char command_list[][32] = {
 		"\\dm ", // direct message
-		"\\log ", // print my message log
+		"\\log", // print my message log
 	};
 	char *tmp = NULL;
-	int command_num;
+	int command_num = -1;
 	int command_size = sizeof(command_list)/sizeof(command_list[0]);
 	struct pollfd fd = get_fd(fd_num);
 
@@ -117,6 +117,15 @@ void process_command(int fd_num, char command[]) {
 		// log
 		case 1:
 		;
+			char *err_msg = NULL;
+			char where[128];
+			snprintf(where, sizeof(where), "user_id == '%s'", user[fd.fd].client_name);
+			int ret = get_all_line("msg_log", where, err_msg);
+
+			int i;
+			for(i = 0; i < ret; i++) {
+				send_to(user[fd.fd].client_name, line[i]);
+			}
 
 			break;
 		default:
@@ -367,7 +376,6 @@ void login(int fd_num) {
 	} else {
 
 		send(fd.fd, error_msg, sizeof(error_msg), 0);
-	
 	}
 }
 
