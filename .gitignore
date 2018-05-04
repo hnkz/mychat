@@ -1,6 +1,6 @@
 *.o
 013server
 013client
-exp1.h
-exp1lib.c
-exp1lib.h
+./exp1.h
+./exp1lib.c
+./exp1lib.h
